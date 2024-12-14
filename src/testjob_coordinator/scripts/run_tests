@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""
+TODO: rename to spaghetty.py
+"""
+import argparse
+import math
+import os
+import yaml
+
+import psutil
+
+import testjob_coordinator.core
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-ps', '--packages-select', nargs = '*', type=str, default=None,
+        help='Packages for which to run tests.')
+    parser.add_argument(
+        '-ncpu', '--num_cpu_cores', type=int, default=None,
+        help='Maximum number of CPU cores to use in total. If not specified, '
+             'determined based on the currently available cores.')
+    parser.add_argument(
+        '-nram', '--ram_mb', type=int, default=None,
+        help='Maximum amount of RAM in MB to use in total. If not specified, '
+             'determined based on the currently available amount of RAM.')
+    args = parser.parse_args()
+
+
+    # If unspecified, set CPU and RAM to use based on available resources
+    # and some simple heuristics
+    if args.num_cpu_cores is None:
+        # Use 90 % of what's available and at least one core
+        # TODO use something else than psutil.cpu_count
+        #      and only count cores allowed to be used by this process?
+        # TODO concerning current usage, have to take into account clock speed?
+        nb_cores = psutil.cpu_count(logical=True)
+        cpu_ratio_used = psutil.cpu_percent(interval=1.0) / 100
+        args.num_cpu_cores = nb_cores - cpu_ratio_used*nb_cores
+        args.num_cpu_cores *= 0.9
+        args.num_cpu_cores = max(1, math.floor(args.num_cpu_cores))
+    else:
+        assert args.num_cpu_cores >= 1
+        assert args.num_cpu_cores <= psutil.cpu_count(logical=True)
+
+    if args.ram_mb is None:
+        # Use 90 % of currently available memory
+        mem_info = psutil.virtual_memory()
+        args.ram_mb = 0.9 * mem_info.available
+    else:
+        assert args.ram_mb >= 1
+        assert args.ram_mb <= psutil.virtual_memory().total
+    print(f'Running test session on {args.num_cpu_cores} logical cores '
+          f'and {args.ram_mb/(1024**3):.1f} GB RAM.')
+
+
+    # Gather YAML test files generated during the build and parse them
+    build_directory = 'build'
+    assert os.path.isdir(build_directory)
+    packages = [d for d in os.listdir(build_directory)
+                if os.path.isdir(os.path.join(build_directory, d))]
+    if args.packages_select:
+        packages = [p for p in packages if p in args.packages_select]
+    # package name => list of parsed test files
+    tests_to_run = []
+    for p in packages:
+        package_coordinator_test_directory = \
+            os.path.join(build_directory, p, 'testjob_coordinator_integration_tests')
+        if not os.path.isdir(package_coordinator_test_directory):
+            continue
+        for root, dirs, files in os.walk(package_coordinator_test_directory):
+            for file in files:
+                if file.endswith('.yml') or file.endswith('.yaml'):
+                    with open(os.path.join(root, file)) as stream:
+                        try:
+                            tests_to_run.append(testjob_coordinator.core.Test(
+                                p, **yaml.safe_load(stream)))
+                        except yaml.YAMLError as e:
+                            print(e)
+                        except Exception as e:
+                            print(e)
+    tests_to_run = testjob_coordinator.core.sort_tests(tests_to_run)
+
+    # Ensure the directories where the results will be stored exist
+    for t in tests_to_run:
+        if t.result:
+            dirname = os.path.dirname(t.result)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname)
+
+    # Run them
+    test_packages = frozenset(t.package for t in tests_to_run)
+    print(f'Starting {len(tests_to_run)} tests of packages {" ".join(test_packages)}')
+    coordinator = testjob_coordinator.core.TestJobCoordinator(
+        tests_to_run, args.num_cpu_cores, args.ram_mb)
+    coordinator.run()
+    print('Completed test run')
