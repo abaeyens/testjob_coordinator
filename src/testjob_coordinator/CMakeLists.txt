@@ -15,6 +15,7 @@ install(
 ament_python_install_package(${PROJECT_NAME})
 install(
   PROGRAMS
+    scripts/list_tests
     scripts/run_tests
   DESTINATION lib/${PROJECT_NAME}
 )

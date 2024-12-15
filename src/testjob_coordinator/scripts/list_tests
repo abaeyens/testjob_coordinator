@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+import argparse
+
+import testjob_coordinator.core
+
+
+def list_tests(packages_select):
+    # Gather YAML test files generated during the build and parse them
+    packages = testjob_coordinator.core.get_packages(args.packages_select)
+    # package name => list of parsed test files
+    tests_to_run = testjob_coordinator.core.load_tests_from_packages(packages)
+
+    if not tests_to_run:
+        print('No testjob_coordinator tests found.')
+        return None
+
+    packages_with_tests = frozenset(t.package for t in tests_to_run)
+    print(f'Found {len(tests_to_run)} testjob_coordinator test(s) in {len(packages_with_tests)} package(s)')
+    test_name_length = 32
+    assert test_name_length >= 12
+    print(f'Package, test{' '*(test_name_length-11)} | # cores | RAM [Mb] | exclusive resources')
+    for p in sorted(packages_with_tests):
+        print(p)
+        tests = sorted([t for t in tests_to_run if t.package == p], key=lambda t: t.filename)
+        for t in tests:
+            testname_shortened = t.filename + ' '*(test_name_length-len(t.filename)) \
+                if len(t.filename) < test_name_length else f'{t.filename[:test_name_length-3]}...'
+            print(f'  {testname_shortened}      {t.num_cpu_cores:4}     {t.ram_mb:6.0f}   '
+                  f'{", ".join(t.exclusive_resources) if t.exclusive_resources else "-"}')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='List testjob_coordinator tests',
+    )
+    parser.add_argument(
+        '-ps', '--packages-select', nargs='*', type=str, default=None,
+        help='Packages for which to list tests.')
+    args = parser.parse_args()
+
+    list_tests(args.packages_select)

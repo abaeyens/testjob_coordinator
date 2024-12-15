@@ -34,8 +34,8 @@ function(testjob_coordinator_add_launch_test FILENAME)
   file(TO_CMAKE_PATH "${FILENAME}" FILENAME)
 
   # create directory and file
-  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/testjob_coordinator_integration_tests")
-  set(outname "${CMAKE_CURRENT_BINARY_DIR}/testjob_coordinator_integration_tests/${FILENAME}.yml")
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/testjob_coordinator_tests")
+  set(outname "${CMAKE_CURRENT_BINARY_DIR}/testjob_coordinator_tests/${FILENAME}.yml")
   file(WRITE ${outname} "---\n")
   # filename
   file(APPEND ${outname} "filename: ${FILENAME}\n")

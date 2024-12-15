@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-TODO: rename to spaghetty.py
+TODO add rerun_failed option?
 """
 import argparse
 import math
 import os
-import yaml
 
 import psutil
 
@@ -13,9 +12,11 @@ import testjob_coordinator.core
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Run testjob_coordinator tests',
+    )
     parser.add_argument(
-        '-ps', '--packages-select', nargs = '*', type=str, default=None,
+        '-ps', '--packages-select', nargs='*', type=str, default=None,
         help='Packages for which to run tests.')
     parser.add_argument(
         '-ncpu', '--num_cpu_cores', type=int, default=None,
@@ -56,30 +57,9 @@ if __name__ == '__main__':
 
 
     # Gather YAML test files generated during the build and parse them
-    build_directory = 'build'
-    assert os.path.isdir(build_directory)
-    packages = [d for d in os.listdir(build_directory)
-                if os.path.isdir(os.path.join(build_directory, d))]
-    if args.packages_select:
-        packages = [p for p in packages if p in args.packages_select]
+    packages = testjob_coordinator.core.get_packages(args.packages_select)
     # package name => list of parsed test files
-    tests_to_run = []
-    for p in packages:
-        package_coordinator_test_directory = \
-            os.path.join(build_directory, p, 'testjob_coordinator_integration_tests')
-        if not os.path.isdir(package_coordinator_test_directory):
-            continue
-        for root, dirs, files in os.walk(package_coordinator_test_directory):
-            for file in files:
-                if file.endswith('.yml') or file.endswith('.yaml'):
-                    with open(os.path.join(root, file)) as stream:
-                        try:
-                            tests_to_run.append(testjob_coordinator.core.Test(
-                                p, **yaml.safe_load(stream)))
-                        except yaml.YAMLError as e:
-                            print(e)
-                        except Exception as e:
-                            print(e)
+    tests_to_run = testjob_coordinator.core.load_tests_from_packages(packages)
     tests_to_run = testjob_coordinator.core.sort_tests(tests_to_run)
 
     # Ensure the directories where the results will be stored exist

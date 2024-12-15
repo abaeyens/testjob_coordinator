@@ -5,7 +5,7 @@ import resource
 import socket
 import subprocess
 import time
-
+import yaml
 
 import domain_coordinator
 
@@ -55,6 +55,42 @@ def sort_tests(tests):
     tests = sorted(tests, key=lambda t: len(t.exclusive_resources), reverse=True)
     return tests
 
+def get_packages(packages_select=None, build_directory='build'):
+    """Get all packages in the build directory
+    TODO if packages_select set, only search for those packages
+         instead of filtering afterwards?
+    """
+    assert os.path.isdir(build_directory)
+    packages = [d for d in os.listdir(build_directory)
+                if os.path.isdir(os.path.join(build_directory, d))]
+    if packages_select:
+        for ps in packages_select:
+            if ps not in packages:
+                # TODO use proper logging
+                print(f"[WARNING] ignoring unknown package '{ps}' in packages_select")
+        packages = [p for p in packages if p in packages_select]
+    return packages
+
+def load_tests_from_packages(packages, build_directory='build'):
+    """Gather YAML test files generated during the build and parse them
+    """
+    tests_to_run = []
+    for p in packages:
+        package_coordinator_test_directory = \
+            os.path.join(build_directory, p, 'testjob_coordinator_tests')
+        if not os.path.isdir(package_coordinator_test_directory):
+            continue
+        for root, dirs, files in os.walk(package_coordinator_test_directory):
+            for file in files:
+                if file.endswith('.yml') or file.endswith('.yaml'):
+                    with open(os.path.join(root, file)) as stream:
+                        try:
+                            tests_to_run.append(Test(p, **yaml.safe_load(stream)))
+                        except yaml.YAMLError as e:
+                            print(e)
+                        except Exception as e:
+                            print(e)
+    return tests_to_run
 
 def execute_test(
         test, domain_id, domain_socket, cores_to_use,
