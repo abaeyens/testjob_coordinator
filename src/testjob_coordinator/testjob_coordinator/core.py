@@ -71,6 +71,20 @@ def get_packages(packages_select=None, build_directory='build'):
         packages = [p for p in packages if p in packages_select]
     return packages
 
+def get_package_paths():
+    """Get dictionary mapping package name to path, based on `colcon list`
+    TODO import and call colcon directly, no subprocess?
+    """
+    process = subprocess.Popen(['colcon', 'list'], stdout=subprocess.PIPE)
+    output, _ = process.communicate()
+    packages = {}
+    for line in output.decode('utf-8').splitlines():
+        parts = line.split('\t')
+        if len(parts) >= 2:
+            name, path = parts[0].strip(), parts[1].strip()
+            packages[name] = path
+    return packages
+
 def load_tests_from_packages(packages, build_directory='build'):
     """Gather YAML test files generated during the build and parse them
     """
@@ -108,11 +122,12 @@ def execute_test(
 
     # Run test in subprocess
     cores = ','.join(str(c) for c in cores_to_use)
+    package_directory = get_package_paths()[test.package]
     cmd = ['taskset', '-c', cores,
            'python3',
            '-m', 'launch_testing.launch_test',
            '--package-name', test.package,
-           os.path.join('src', test.package, test.filename),
+           os.path.join(package_directory, test.filename),
            '--junit-xml', test.result]
     print(f'Starting test {test.package}/{test.filename} on core(s) {cores} '
           f'with ROS_DOMAIN_ID {domain_id} '
